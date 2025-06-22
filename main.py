@@ -1,48 +1,42 @@
 from flask import Flask, request, jsonify
-import pandas as pd
-from openpyxl import load_workbook
+import openpyxl
 import os
 
 app = Flask(__name__)
 
-EXCEL_PATH = "AST_WM.xlsx"
-
-@app.route("/")
-def index():
-    return "Servidor de Riesgos y AST activo."
-
-@app.route("/llenar_riesgo", methods=["POST"])
+@app.route('/llenar_riesgo', methods=['POST'])
 def llenar_riesgo():
     data = request.json
-    wb = load_workbook(EXCEL_PATH)
-    ws = wb["Actual"]
+    archivo_excel = 'AST_WM.xlsx'
 
-    fila = 5
-    while ws[f"A{fila}"].value is not None:
-        fila += 1
+    # Cargar archivo y hoja activa
+    wb = openpyxl.load_workbook(archivo_excel)
+    ws = wb.active
 
-    columnas = {
-        "actividad": "A",
-        "condiciones_instalaciones": "B",
-        "condiciones_seguridad": "C",
-        "procedimientos_existentes": "D",
-        "tipo_factor_riesgo": "E",
-        "causas_posibles": "F",
-        "riesgos_detectados": "G",
-        "frecuencia": "H",
-        "severidad": "I",
-        "impacto": "J",
-        "medidas_control": "K"
-    }
+    # Borrar cualquier contenido desde la fila 5 hacia abajo (si existe)
+    max_row = ws.max_row
+    if max_row >= 5:
+        for row in ws.iter_rows(min_row=5, max_row=max_row):
+            for cell in row:
+                cell.value = None
 
-    for campo, letra in columnas.items():
-        if campo in data:
-            ws[f"{letra}{fila}"] = data[campo]
+    # Insertar nueva fila desde la fila 5
+    nueva_fila = [
+        "Actividad registrada por IA",
+        data.get("riesgos_detectados", ""),
+        data.get("frecuencia", ""),
+        data.get("severidad", ""),
+        data.get("impacto", ""),
+        data.get("medidas_control", "")
+    ]
+    ws.append(nueva_fila)
 
-    wb.save(EXCEL_PATH)
-    return jsonify({"mensaje": "Riesgo registrado correctamente", "fila_insertada": fila})
+    wb.save(archivo_excel)
+    return jsonify({
+        "mensaje": "Registro exitoso",
+        "fila_insertada": ws.max_row
+    })
 
-if __name__ == "__main__":
-    import os
-port = int(os.environ.get("PORT", 5000))
-app.run(host='0.0.0.0', port=port)
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
