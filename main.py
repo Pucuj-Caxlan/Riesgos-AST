@@ -1,53 +1,70 @@
 from flask import Flask, request, jsonify
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment
+import openpyxl
 import os
+import shutil
+from openpyxl.styles import Alignment
 
 app = Flask(__name__)
 
 @app.route("/llenar_riesgo", methods=["POST"])
 def llenar_riesgo():
-    try:
-        datos = request.get_json()
+    datos = request.get_json()
 
-        # Ruta relativa al archivo dentro de /tmp
-        archivo_excel = "tmp/AST_WM.xlsx"
-        wb = load_workbook(archivo_excel)
-        ws = wb.active
+    actividad = datos.get("actividad", "")
+    riesgos = datos.get("riesgos_detectados", "")
+    frecuencia = datos.get("frecuencia", "")
+    severidad = datos.get("severidad", "")
+    impacto = datos.get("impacto", "")
+    medidas = datos.get("medidas_control", "")
 
-        # Eliminar fila 5 y dejarla lista
-        ws.delete_rows(5)
-        ws.insert_rows(5)
+    # Cargar el archivo desde tmp/
+    origen = "tmp/AST_WM.xlsx"
+    if not os.path.exists(origen):
+        return jsonify({"error": "Archivo AST_WM.xlsx no encontrado en tmp/"}), 500
 
-        # Campos en orden, incluyendo los que ahora deseas llenar
-        campos = [
-            "actividad",                    # A
-            "riesgos_detectados",          # B
-            "condiciones_seguridad",       # C (nuevo)
-            "frecuencia",                  # D
-            "severidad",                   # E
-            "impacto",                     # F
-            "medidas_control"             # G
-        ]
+    wb = openpyxl.load_workbook(origen)
+    ws = wb.active
 
-        for i, campo in enumerate(campos, start=1):
-            valor = datos.get(campo, "")
-            valor = valor.replace("*", "").strip()  # Limpia asteriscos
-            celda = ws.cell(row=5, column=i)
-            celda.value = valor
+    # Buscar la siguiente fila vacía
+    fila = 6
+    while ws.cell(row=fila, column=1).value:
+        fila += 1
 
-            # Aplica formato: justificar si largo, centrar si corto
-            if len(valor) > 30:
-                celda.alignment = Alignment(horizontal='justify', vertical='top', wrap_text=True)
-            else:
-                celda.alignment = Alignment(horizontal='center', vertical='center')
+    # Limpieza de texto
+    actividad = actividad.replace("*", "")
+    riesgos = riesgos.replace("*", "")
+    medidas = medidas.replace("*", "")
 
-        wb.save(archivo_excel)
-        return jsonify({"mensaje": "Registro exitoso", "fila_insertada": 5}), 200
+    # Escribir los datos
+    ws.cell(row=fila, column=1, value=actividad)
+    ws.cell(row=fila, column=2, value=riesgos)
+    ws.cell(row=fila, column=3, value="B" if "B" in riesgos else "M")  # Condiciones seg.
+    ws.cell(row=fila, column=4, value=frecuencia)
+    ws.cell(row=fila, column=5, value=severidad)
+    ws.cell(row=fila, column=6, value=impacto)
+    ws.cell(row=fila, column=7, value=medidas)
 
-    except Exception as e:
-        return jsonify({"mensaje": f"Error: {str(e)}"}), 500
+    # Formato visual
+    for col in range(1, 8):
+        celda = ws.cell(row=fila, column=col)
+        texto = str(celda.value).strip()
+        if len(texto) < 30:
+            celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        else:
+            celda.alignment = Alignment(horizontal="justify", vertical="top", wrap_text=True)
+
+    # Guardar en tmp
+    ruta_tmp = "/tmp/AST_WM.xlsx"
+    wb.save(ruta_tmp)
+
+    # Copiar a static para descarga
+    os.makedirs("static", exist_ok=True)
+    shutil.copy(ruta_tmp, "static/AST_WM.xlsx")
+
+    return jsonify({
+        "mensaje": f"Análisis registrado en fila {fila}.",
+        "fila_insertada": fila
+    })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=True)
