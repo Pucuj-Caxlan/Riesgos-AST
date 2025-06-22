@@ -11,27 +11,24 @@ EXCEL_PATH = "AST_WM.xlsx"
 @app.route("/llenar_riesgo", methods=["POST"])
 def llenar_riesgo():
     try:
-        # Datos JSON recibidos desde el GPT
         datos = request.get_json()
 
-        # Si no existe el archivo, crear uno con encabezados
+        # Crear archivo si no existe
         if not os.path.exists(EXCEL_PATH):
             columnas = [
                 "Actividad", "Riesgos detectados", "Frecuencia",
                 "Severidad", "Impacto", "Medidas de control"
             ]
             df = pd.DataFrame(columns=columnas)
-            df.to_excel(EXCEL_PATH, index=False)
+        else:
+            df = pd.read_excel(EXCEL_PATH)
 
-        # Cargar archivo existente
-        df = pd.read_excel(EXCEL_PATH)
-
-        # Si la fila 5 ya contiene datos, borrarla
+        # Eliminar fila 5 si existe
         if len(df) >= 5:
-            df.drop(index=4, inplace=True)  # Fila 5 es índice 4
+            df.drop(index=4, inplace=True)
             df.reset_index(drop=True, inplace=True)
 
-        # Agregar la nueva fila
+        # Agregar nueva fila
         nueva_fila = {
             "Actividad": datos["actividad"],
             "Riesgos detectados": datos["riesgos_detectados"],
@@ -42,7 +39,7 @@ def llenar_riesgo():
         }
         df.loc[len(df)] = nueva_fila
 
-        # Guardar cambios
+        # Guardar archivo Excel sin celdas combinadas
         df.to_excel(EXCEL_PATH, index=False)
 
         return jsonify({
