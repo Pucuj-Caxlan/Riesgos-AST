@@ -7,6 +7,20 @@ app = Flask(__name__)
 def llenar_riesgo():
     try:
         datos = request.get_json()
+
+        # Lista de campos requeridos y su orden en columnas
+        campos = [
+            "actividad", "riesgos_detectados", "frecuencia",
+            "severidad", "impacto", "medidas_control"
+        ]
+
+        # Validar que todos los campos estén presentes y no vacíos
+        for campo in campos:
+            if campo not in datos or not str(datos[campo]).strip():
+                return jsonify({
+                    "mensaje": f"Falta o está vacío el campo requerido: '{campo}'"
+                }), 400
+
         wb = load_workbook("AST_WM.xlsx")
         ws = wb.active
 
@@ -15,12 +29,6 @@ def llenar_riesgo():
 
         # Insertar nueva fila vacía en la posición 5
         ws.insert_rows(5)
-
-        # Lista de campos en orden de columnas
-        campos = [
-            "actividad", "riesgos_detectados", "frecuencia",
-            "severidad", "impacto", "medidas_control"
-        ]
 
         # Insertar datos en la nueva fila
         for i, campo in enumerate(campos, start=1):
@@ -32,7 +40,7 @@ def llenar_riesgo():
     except Exception as e:
         return jsonify({"mensaje": f"Error: {str(e)}"}), 500
 
-# ESTA PARTE FINAL ES LA QUE FALTABA INDENTAR BIEN
+# Punto final bien indentado
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
