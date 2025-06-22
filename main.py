@@ -1,70 +1,65 @@
-from flask import Flask, request, jsonify
-import openpyxl
-import os
-import shutil
+from flask import Flask, request, jsonify, send_from_directory
+from openpyxl import load_workbook
 from openpyxl.styles import Alignment
+import os
 
 app = Flask(__name__)
 
 @app.route("/llenar_riesgo", methods=["POST"])
 def llenar_riesgo():
-    datos = request.get_json()
+    try:
+        datos = request.get_json()
 
-    actividad = datos.get("actividad", "")
-    riesgos = datos.get("riesgos_detectados", "")
-    frecuencia = datos.get("frecuencia", "")
-    severidad = datos.get("severidad", "")
-    impacto = datos.get("impacto", "")
-    medidas = datos.get("medidas_control", "")
+        # Ruta del archivo en carpeta tmp (Render permite escritura ahí)
+        excel_path = "/tmp/AST_WM.xlsx"
+        template_path = "tmp/AST_WM.xlsx"
 
-    # Cargar el archivo desde tmp/
-    origen = "tmp/AST_WM.xlsx"
-    if not os.path.exists(origen):
-        return jsonify({"error": "Archivo AST_WM.xlsx no encontrado en tmp/"}), 500
+        # Si el archivo no existe en tmp, cópialo desde el repo
+        if not os.path.exists(excel_path):
+            from shutil import copyfile
+            copyfile(template_path, excel_path)
 
-    wb = openpyxl.load_workbook(origen)
-    ws = wb.active
+        wb = load_workbook(excel_path)
+        ws = wb.active
 
-    # Buscar la siguiente fila vacía
-    fila = 6
-    while ws.cell(row=fila, column=1).value:
-        fila += 1
+        # Elimina la fila 5 si ya tiene contenido (usualmente contiene celdas combinadas)
+        ws.delete_rows(5)
+        ws.insert_rows(5)
 
-    # Limpieza de texto
-    actividad = actividad.replace("*", "")
-    riesgos = riesgos.replace("*", "")
-    medidas = medidas.replace("*", "")
+        # Mapeo en orden de columnas A–L (1–12)
+        columnas = {
+            1: datos["actividad"],
+            2: datos["riesgos_detectados"],
+            3: "B",     # Condiciones de herramientas y equipo (según STPS)
+            4: "SI",    # Instrucciones de seguridad
+            5: "MEDIO", # Tipo de factor de riesgo
+            6: "Lesiones por impacto, cortes, proyecciones",
+            7: datos["frecuencia"],
+            8: datos["severidad"],
+            9: datos["impacto"],
+            10: datos["medidas_control"],
+        }
 
-    # Escribir los datos
-    ws.cell(row=fila, column=1, value=actividad)
-    ws.cell(row=fila, column=2, value=riesgos)
-    ws.cell(row=fila, column=3, value="B" if "B" in riesgos else "M")  # Condiciones seg.
-    ws.cell(row=fila, column=4, value=frecuencia)
-    ws.cell(row=fila, column=5, value=severidad)
-    ws.cell(row=fila, column=6, value=impacto)
-    ws.cell(row=fila, column=7, value=medidas)
+        # Insertar y formatear celdas
+        for col, valor in columnas.items():
+            celda = ws.cell(row=5, column=col)
+            celda.value = valor
+            if len(str(valor)) <= 5:
+                celda.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                celda.alignment = Alignment(horizontal="justify", vertical="top", wrap_text=True)
 
-    # Formato visual
-    for col in range(1, 8):
-        celda = ws.cell(row=fila, column=col)
-        texto = str(celda.value).strip()
-        if len(texto) < 30:
-            celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        else:
-            celda.alignment = Alignment(horizontal="justify", vertical="top", wrap_text=True)
+        wb.save(excel_path)
+        return jsonify({"mensaje": "Registro exitoso", "fila_insertada": 5}), 200
 
-    # Guardar en tmp
-    ruta_tmp = "/tmp/AST_WM.xlsx"
-    wb.save(ruta_tmp)
+    except Exception as e:
+        return jsonify({"mensaje": f"Error: {str(e)}"}), 500
 
-    # Copiar a static para descarga
-    os.makedirs("static", exist_ok=True)
-    shutil.copy(ruta_tmp, "static/AST_WM.xlsx")
+@app.route("/static/AST_WM.xlsx", methods=["GET"])
+def descargar_archivo():
+    return send_from_directory("/tmp", "AST_WM.xlsx", as_attachment=True)
 
-    return jsonify({
-        "mensaje": f"Análisis registrado en fila {fila}.",
-        "fila_insertada": fila
-    })
-
+# Configuración para despliegue en Render
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
