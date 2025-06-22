@@ -1,3 +1,8 @@
+from flask import Flask, request, jsonify
+from openpyxl import load_workbook
+
+app = Flask(__name__)  # <--- ESTA LÍNEA ES LA QUE FALTA
+
 @app.route("/llenar_riesgo", methods=["POST"])
 def llenar_riesgo():
     try:
@@ -5,7 +10,7 @@ def llenar_riesgo():
         wb = load_workbook("AST_WM.xlsx")
         ws = wb.active
 
-        # Eliminar fila 5 (que contiene celdas combinadas)
+        # Eliminar fila 5
         ws.delete_rows(5)
 
         # Insertar nueva fila vacía en la posición 5
@@ -17,7 +22,6 @@ def llenar_riesgo():
             "severidad", "impacto", "medidas_control"
         ]
 
-        # Insertar datos en la nueva fila
         for i, campo in enumerate(campos, start=1):
             ws.cell(row=5, column=i).value = datos[campo]
 
